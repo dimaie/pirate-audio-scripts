@@ -9,20 +9,40 @@ app = Flask(__name__)
 def index():
     return f"""
     <html>
-      <head><title>Pirate Audio Control</title></head>
+      <head>
+        <title>Pirate Audio Control</title>
+        <script>
+          async function setStream() {{
+            const url = document.getElementById('stream_url').value;
+            await fetch('/set_url', {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+              body: 'url=' + encodeURIComponent(url)
+            }});
+            document.getElementById('current_stream').innerText = url;
+          }}
+
+          async function setVolume() {{
+            const vol = document.getElementById('volume_input').value;
+            await fetch('/set_volume', {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+              body: 'volume=' + encodeURIComponent(vol)
+            }});
+            document.getElementById('current_volume').innerText = vol;
+          }}
+        </script>
+      </head>
       <body style="font-family:sans-serif; margin:2em;">
         <h2>Current Stream</h2>
-        <p>{player.current_url}</p>
-        <form action="/set_url" method="post">
-          <input type="text" name="url" size="50" placeholder="Stream URL">
-          <button type="submit">Set Stream</button>
-        </form>
+        <p id="current_stream">{player.current_url}</p>
+        <input type="text" id="stream_url" size="50" placeholder="Stream URL">
+        <button onclick="setStream()">Set Stream</button>
+
         <h2>Volume</h2>
-        <p>Current: {player.current_volume}</p>
-        <form action="/set_volume" method="post">
-          <input type="number" name="volume" min="{player.VOLUME_MIN}" max="{player.VOLUME_MAX}" value="{player.current_volume}">
-          <button type="submit">Set Volume</button>
-        </form>
+        <p id="current_volume">{player.current_volume}</p>
+        <input type="number" id="volume_input" min="{player.VOLUME_MIN}" max="{player.VOLUME_MAX}" value="{player.current_volume}">
+        <button onclick="setVolume()">Set Volume</button>
       </body>
     </html>
     """
@@ -33,7 +53,7 @@ def set_url():
     if not url:
         return "Missing url", 400
     player.play_stream(url)
-    return f"Stream set to {url}", 200
+    return "OK", 200
 
 @app.route("/set_volume", methods=["POST"])
 def set_volume():
@@ -44,7 +64,7 @@ def set_volume():
     player.current_volume = max(player.VOLUME_MIN, min(player.VOLUME_MAX, vol))
     player.player.audio_set_volume(player.current_volume)
     player.update_display()
-    return f"Volume set to {player.current_volume}", 200
+    return "OK", 200
 
 @app.route("/status")
 def status():
