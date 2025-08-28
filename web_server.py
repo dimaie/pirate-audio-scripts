@@ -7,6 +7,19 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
+    # List of preset stations (label and URL)
+    presets = [
+        ("BBC World Service", "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service"),
+        ("NPR News", "https://npr-ice.streamguys1.com/live.mp3"),
+        ("Radio Swiss Classic", "http://stream.srg-ssr.ch/m/rsc_de/mp3_128"),
+        ("Classic FM UK", "http://media-ice.musicradio.com/ClassicFMMP3")
+    ]
+
+    presets_html = "".join(
+        f'<button onclick="setPreset(`{url}`)">{label}</button> '
+        for label, url in presets
+    )
+
     return f"""
     <html>
       <head>
@@ -22,14 +35,24 @@ def index():
             document.getElementById('current_stream').innerText = url;
           }}
 
-          async function setVolume() {{
-            const vol = document.getElementById('volume_input').value;
+          async function setPreset(url) {{
+            document.getElementById('stream_url').value = url;
+            await setStream();
+          }}
+
+          async function setVolume(vol) {{
             await fetch('/set_volume', {{
               method: 'POST',
               headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
               body: 'volume=' + encodeURIComponent(vol)
             }});
             document.getElementById('current_volume').innerText = vol;
+          }}
+
+          function volumeChanged(e) {{
+            const vol = e.target.value;
+            document.getElementById('current_volume').innerText = vol;
+            setVolume(vol);
           }}
         </script>
       </head>
@@ -39,10 +62,13 @@ def index():
         <input type="text" id="stream_url" size="50" placeholder="Stream URL">
         <button onclick="setStream()">Set Stream</button>
 
+        <h3>Presets</h3>
+        {presets_html}
+
         <h2>Volume</h2>
-        <p id="current_volume">{player.current_volume}</p>
-        <input type="number" id="volume_input" min="{player.VOLUME_MIN}" max="{player.VOLUME_MAX}" value="{player.current_volume}">
-        <button onclick="setVolume()">Set Volume</button>
+        <p>Current: <span id="current_volume">{player.current_volume}</span></p>
+        <input type="range" min="{player.VOLUME_MIN}" max="{player.VOLUME_MAX}" 
+               value="{player.current_volume}" oninput="volumeChanged(event)">
       </body>
     </html>
     """
