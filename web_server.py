@@ -2,12 +2,23 @@
 from flask import Flask, request, jsonify
 import threading
 import player  # import the player module
+import logging
 
 app = Flask(__name__)
 
+# Suppress werkzeug INFO logs for specific paths
+class FilterPath(logging.Filter):
+    def filter(self, record):
+        # Suppress logging for /status, /set_volume, /set_url
+        if any(path in record.getMessage() for path in ['/status']):
+            return False
+        return True
+
+werk_logger = logging.getLogger('werkzeug')
+werk_logger.addFilter(FilterPath())
+
 @app.route("/")
 def index():
-    # List of preset stations (label and URL)
     presets = [
         ("BBC World Service", "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service"),
         ("NPR News", "https://npr-ice.streamguys1.com/live.mp3"),
@@ -54,6 +65,20 @@ def index():
             document.getElementById('current_volume').innerText = vol;
             setVolume(vol);
           }}
+
+          async function refreshStatus() {{
+            try {{
+              const res = await fetch('/status');
+              const data = await res.json();
+              document.getElementById('current_stream').innerText = data.url;
+              document.getElementById('current_volume').innerText = data.volume;
+              document.getElementById('volume_slider').value = data.volume;
+            }} catch(e) {{
+              console.error('Status fetch failed', e);
+            }}
+          }}
+
+          setInterval(refreshStatus, 1000); // poll every second
         </script>
       </head>
       <body style="font-family:sans-serif; margin:2em;">
@@ -67,7 +92,7 @@ def index():
 
         <h2>Volume</h2>
         <p>Current: <span id="current_volume">{player.current_volume}</span></p>
-        <input type="range" min="{player.VOLUME_MIN}" max="{player.VOLUME_MAX}" 
+        <input id="volume_slider" type="range" min="{player.VOLUME_MIN}" max="{player.VOLUME_MAX}" 
                value="{player.current_volume}" oninput="volumeChanged(event)">
       </body>
     </html>
