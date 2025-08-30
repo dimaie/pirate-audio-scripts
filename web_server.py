@@ -53,7 +53,16 @@ def set_volume():
 
 @app.route("/status")
 def status():
-    return jsonify({"url": player.current_url, "volume": player.current_volume})
+    return jsonify({
+        "url": player.current_url,
+        "volume": player.current_volume,
+        "muted": player.is_muted
+    })
+
+@app.route("/toggle_mute", methods=["POST"])
+def toggle_mute_route():
+    player.toggle_mute()  # call the function in player.py
+    return "OK", 200
 
 def run_web():
     app.run(host="0.0.0.0", port=8080)

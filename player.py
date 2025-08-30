@@ -1,68 +1,154 @@
 import vlc
 import time
 from gpiozero import Button
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 import st7789
 import json
+import time
+import threading
 
 # ---- Load config ----
 with open("config.json", "r") as f:
     config = json.load(f)
 
+stations = config["stations"]
 VOLUME_MIN = config["volume"]["min"]
 VOLUME_MAX = config["volume"]["max"]
 VOLUME_STEP = config["volume"]["step"]
 DEFAULT_VOLUME = config["volume"]["default"]
 
-# Pirate Audio buttons
+DISPLAY_TIMEOUT = 30  # seconds
+_last_activity = time.time()
+_display_on = True
+
+def reset_idle_timer():
+    global _last_activity, _display_on
+    _last_activity = time.time()
+    if not _display_on:
+        _display_on = True
+        update_display()  # redraw screen
+
+# Map url -> label for quick lookup
+url_to_label = {s["url"]: s["label"] for s in stations}
+
+# ---- Pirate Audio button pins (BCM numbering) ----
 btn_a = Button(5)   # Volume down
 btn_b = Button(6)   # Volume up
-
+btn_c = Button(16)
 # ---- VLC Setup ----
 instance = vlc.Instance("--aout=alsa", "--alsa-audio-device=hw:1,0")
 player = instance.media_player_new()
 current_volume = DEFAULT_VOLUME
-current_url = config["stations"][0]["url"]
+
+# ---- Current stream ----
+current_url = stations[0]["url"]
+current_label = stations[0]["label"]
 
 # ---- Display Setup ----
-disp = st7789.ST7789(height=240, width=240, rotation=90,
-                     port=0, cs=1, dc=9, spi_speed_hz=80_000_000)
+disp = st7789.ST7789(
+    height=240,
+    width=240,
+    rotation=90,
+    port=0,
+    cs=1,
+    dc=9,
+    spi_speed_hz=80_000_000
+)
+
 img = Image.new("RGB", (240, 240), color=(0, 0, 0))
 draw = ImageDraw.Draw(img)
 
-# ---- Functions ----
+# Load slightly smaller font
+try:
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+except:
+    font = None  # fallback to default font
+
 def update_display():
-    img.paste((0, 0, 0), (0, 0, 240, 240))
-    bar_width = int((current_volume / VOLUME_MAX) * 240)
-    draw.rectangle((0, 100, bar_width, 140), fill=(0, 255, 0))
+    global _last_activity, _display_on
+    # Reset idle timer whenever we redraw
+    _last_activity = time.time()
+    if not _display_on:
+        _display_on = True  # wake up display
+
+    img.paste((0, 0, 0), (0, 0, 240, 240))  # clear screen
+
+    # Draw station label centered horizontally
+    text_width, text_height = draw.textsize(current_label, font=font)
+    text_x = (240 - text_width) // 2
+    draw.text((text_x, 20), current_label, fill=(0, 255, 0), font=font)
+
+    # Optional: display mute status
+    if is_muted:
+        mute_text = "MUTED"
+        text_width, _ = draw.textsize(mute_text, font=font)
+        draw.text(((240 - text_width) // 2, 50), mute_text, fill=(0, 255, 0), font=font)
+
+    # Draw volume bar
+    bar_max_width = 180
+    bar_width = int((current_volume / VOLUME_MAX) * bar_max_width)
+    bar_height = 5
+    bar_x = (240 - bar_max_width) // 2
+    bar_y = 40
+    draw.rectangle((bar_x, bar_y, bar_x + bar_width, bar_y + bar_height), fill=(0, 255, 0))
+
     disp.display(img)
 
+# ---- Stream Control ----
 def play_stream(url):
-    global current_url
+    global current_url, current_label
     current_url = url
+    current_label = url_to_label.get(url, "Unknown Station")
+
     media = instance.media_new(url)
     player.set_media(media)
     player.play()
     time.sleep(1)
     player.audio_set_volume(current_volume)
+
+    # Update the Pirate Audio screen
     update_display()
 
+is_muted = False
+
+def toggle_mute():
+    global is_muted
+    player.audio_toggle_mute()
+    is_muted = not is_muted
+    update_display()
+    print(f"Muted: {is_muted}")
+
+# ---- Button Handlers ----
 def volume_up():
     global current_volume
     current_volume = min(VOLUME_MAX, current_volume + VOLUME_STEP)
     player.audio_set_volume(current_volume)
     update_display()
+    print(f"Volume up: {current_volume}")
 
 def volume_down():
     global current_volume
     current_volume = max(VOLUME_MIN, current_volume - VOLUME_STEP)
     player.audio_set_volume(current_volume)
     update_display()
+    print(f"Volume down: {current_volume}")
 
-# ---- Button handlers ----
+# Background thread to turn off display after idle
+def idle_display_monitor():
+    global _display_on
+    while True:
+        time.sleep(1)
+        if _display_on and (time.time() - _last_activity) > DISPLAY_TIMEOUT:
+            # Clear screen by drawing a black rectangle
+            img.paste((0, 0, 0), (0, 0, 240, 240))
+            disp.display(img)
+            _display_on = False
+
+threading.Thread(target=idle_display_monitor, daemon=True).start()
+
 btn_a.when_pressed = volume_down
 btn_b.when_pressed = volume_up
-
-# ---- Initial playback ----
+btn_c.when_pressed = toggle_mute
+# ---- Initial Playback ----
 play_stream(current_url)
 update_display()

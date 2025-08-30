@@ -1,3 +1,8 @@
+async function toggleMute() {
+    await fetch('/toggle_mute', { method: 'POST' });
+    await refreshStatus();
+}
+
 async function setStream() {
   const url = document.getElementById('stream_url').value;
   await fetch('/set_url', {
@@ -29,15 +34,16 @@ function volumeChanged(e) {
 }
 
 async function refreshStatus() {
-  try {
-    const res = await fetch('/status');
-    const data = await res.json();
-    document.getElementById('current_stream').innerText = data.url;
-    document.getElementById('current_volume').innerText = data.volume;
-    document.getElementById('volume_slider').value = data.volume;
-  } catch (e) {
-    console.error('Status fetch failed', e);
-  }
+    try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        document.getElementById('current_stream').innerText = data.url;
+        document.getElementById('current_volume').innerText = data.volume;
+        document.getElementById('volume_slider').value = data.volume;
+        document.getElementById('mute_state').innerText = data.muted ? "ON" : "OFF";
+    } catch(e) {
+        console.error('Status fetch failed', e);
+    }
 }
 
 setInterval(refreshStatus, 1000); // poll every second
