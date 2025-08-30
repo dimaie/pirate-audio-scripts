@@ -17,15 +17,9 @@ werk_logger.addFilter(FilterPath())
 
 @app.route("/")
 def index():
-    presets = [
-        ("BBC World Service", "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service"),
-        ("NPR News", "https://npr-ice.streamguys1.com/live.mp3"),
-        ("Radio Swiss Classic", "http://stream.srg-ssr.ch/m/rsc_de/mp3_128"),
-        ("Classic FM UK", "http://media-ice.musicradio.com/ClassicFMMP3")
-    ]
     return render_template(
         "index.html",
-        presets=presets,
+        presets=player.stations,        # reuse parsed stations
         current_url=player.current_url,
         current_volume=player.current_volume,
         volume_min=player.VOLUME_MIN,
