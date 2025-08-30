@@ -12,12 +12,11 @@
     <p>State: <span id="mute_state">OFF</span></p>
     <button onclick="toggleMute()">Mute / Unmute</button>
     <h3>Presets</h3>
-    <select id="preset_select" onchange="setPreset(this.value)">
-      {% for label, url in presets %}
-        <option value="{{ url }}">{{ label }}</option>
-      {% endfor %}
-    </select>
-
+	<select id="preset_select" onchange="setPreset(this.value)">
+	  {% for station in presets %}
+	    <option value="{{ station.url }}">{{ station.label }}</option>
+	  {% endfor %}
+	</select>
     <h2>Volume</h2>
     <p>Current: <span id="current_volume">{{ current_volume }}</span></p>
     <input id="volume_slider" type="range" 
