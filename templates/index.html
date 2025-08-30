@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Pirate Audio Control</title>
+    <script>
+      async function setStream() {
+        const url = document.getElementById('stream_url').value;
+        await fetch('/set_url', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'url=' + encodeURIComponent(url)
+        });
+        document.getElementById('current_stream').innerText = url;
+      }
+
+      async function setPreset() {
+        const dropdown = document.getElementById('preset_select');
+        const url = dropdown.value;
+        if (url) {
+          document.getElementById('stream_url').value = url;
+          await setStream();
+        }
+      }
+
+      async function setVolume(vol) {
+        await fetch('/set_volume', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'volume=' + encodeURIComponent(vol)
+        });
+        document.getElementById('current_volume').innerText = vol;
+      }
+
+      function volumeChanged(e) {
+        const vol = e.target.value;
+        document.getElementById('current_volume').innerText = vol;
+        setVolume(vol);
+      }
+
+      async function refreshStatus() {
+        try {
+          const res = await fetch('/status');
+          const data = await res.json();
+          document.getElementById('current_stream').innerText = data.url;
+          document.getElementById('current_volume').innerText = data.volume;
+          document.getElementById('volume_slider').value = data.volume;
+        } catch(e) {
+          console.error('Status fetch failed', e);
+        }
+      }
+
+      setInterval(refreshStatus, 1000); // poll every second
+    </script>
+  </head>
+  <body style="font-family:sans-serif; margin:2em;">
+    <h2>Current Stream</h2>
+    <p id="current_stream">{{ current_url }}</p>
+    <input type="text" id="stream_url" size="50" placeholder="Stream URL">
+    <button onclick="setStream()">Set Stream</button>
+
+    <h3>Presets</h3>
+    <select id="preset_select" onchange="setPreset()">
+      <option value="">-- Select a station --</option>
+      {% for label, url in presets %}
+        <option value="{{ url }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+
+    <h2>Volume</h2>
+    <p>Current: <span id="current_volume">{{ current_volume }}</span></p>
+    <input id="volume_slider" type="range" min="{{ volume_min }}" max="{{ volume_max }}"
+           value="{{ current_volume }}" oninput="volumeChanged(event)">
+  </body>
+</html>
