@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Suppress werkzeug INFO logs for specific paths
 class FilterPath(logging.Filter):
     def filter(self, record):
-        # Suppress logging for /status, /set_volume, /set_url
+        # Suppress logging for /status
         if any(path in record.getMessage() for path in ['/status']):
             return False
         return True
@@ -26,8 +26,9 @@ def index():
         ("Classic FM UK", "http://media-ice.musicradio.com/ClassicFMMP3")
     ]
 
-    presets_html = "".join(
-        f'<button onclick="setPreset(`{url}`)">{label}</button> '
+    # Build HTML for <select> dropdown
+    options_html = "".join(
+        f'<option value="{url}">{label}</option>'
         for label, url in presets
     )
 
@@ -46,7 +47,9 @@ def index():
             document.getElementById('current_stream').innerText = url;
           }}
 
-          async function setPreset(url) {{
+          async function setPreset() {{
+            const dropdown = document.getElementById('preset_select');
+            const url = dropdown.value;
             document.getElementById('stream_url').value = url;
             await setStream();
           }}
@@ -88,7 +91,10 @@ def index():
         <button onclick="setStream()">Set Stream</button>
 
         <h3>Presets</h3>
-        {presets_html}
+        <select id="preset_select" onchange="setPreset()">
+          <option value="">-- Select a station --</option>
+          {options_html}
+        </select>
 
         <h2>Volume</h2>
         <p>Current: <span id="current_volume">{player.current_volume}</span></p>
