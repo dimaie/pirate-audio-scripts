@@ -6,7 +6,13 @@ import st7789
 import json
 import time
 import threading
+from gpiozero import LED
 
+BACKLIGHT_PIN = 13  # adjust to your board
+backlight = LED(BACKLIGHT_PIN)
+
+# turn on at startup
+backlight.on()
 # ---- Load config ----
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -69,7 +75,8 @@ def update_display():
     # Reset idle timer whenever we redraw
     _last_activity = time.time()
     if not _display_on:
-        _display_on = True  # wake up display
+        backlight.on()   # turn backlight on
+        _display_on = True
 
     img.paste((0, 0, 0), (0, 0, 240, 240))  # clear screen
 
@@ -137,12 +144,10 @@ def volume_down():
 def idle_display_monitor():
     global _display_on
     while True:
-        time.sleep(1)
-        if _display_on and (time.time() - _last_activity) > DISPLAY_TIMEOUT:
-            # Clear screen by drawing a black rectangle
-            img.paste((0, 0, 0), (0, 0, 240, 240))
-            disp.display(img)
+        if _display_on and time.time() - _last_activity > DISPLAY_TIMEOUT:
+            backlight.off()   # turn off backlight
             _display_on = False
+        time.sleep(1)
 
 threading.Thread(target=idle_display_monitor, daemon=True).start()
 
