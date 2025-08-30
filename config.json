@@ -1,0 +1,30 @@
+{
+  "stations": [
+    {
+      "label": "BBC World Service",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service"
+    },
+    {
+      "label": "NPR News",
+      "url": "https://npr-ice.streamguys1.com/live.mp3"
+    },
+    {
+      "label": "Radio Swiss Classic",
+      "url": "http://stream.srg-ssr.ch/m/rsc_de/mp3_128"
+    },
+    {
+      "label": "Classic FM UK",
+      "url": "http://media-ice.musicradio.com/ClassicFMMP3"
+    }
+  ],
+  "volume": {
+    "min": 0,
+    "max": 200,
+    "step": 10,
+    "default": 100
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  }
+}
