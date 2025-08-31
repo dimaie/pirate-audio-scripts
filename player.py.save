@@ -102,7 +102,12 @@ def update_display():
     draw.rectangle((bar_x, bar_y, bar_x + bar_width, bar_y + bar_height), fill=(0, 255, 0))
 
     # Timer
-    timer_text = f"Timer: " + get_timer_status()
+    if timer_enabled and timer_end is not None:
+        remaining = max(0, int((timer_end - time.time()) / 60))
+        timer_text = f"Timer: {remaining} min"
+    else:
+        timer_text = "Timer: OFF"
+
     w, _ = draw.textsize(timer_text, font=font)
     draw.text(((240 - w)//2, 70), timer_text, fill=(0, 255, 0), font=font)
 
@@ -150,17 +155,8 @@ def volume_down():
 # --- Timer state ---
 timer_enabled = False
 timer_end = None
-timer_remaining = 0
 timer_interval = config["timer"]["interval"]  # minutes (from config.json)
-
-def get_timer_status():
-    global timer_enabled, timer_end
-    if timer_enabled and timer_end is not None:
-        remaining = max(0, int((timer_end - time.time()) / 60))
-        return f"ON ({remaining} min left)"
-    else:
-        return "OFF"
-
+ti
 def start_timer():
     global timer_enabled, timer_end
     timer_enabled = True
@@ -179,12 +175,6 @@ def toggle_timer():
         stop_timer()
     else:
         start_timer()
-
-def set_timer_interval(minutes):
-    global timer_interval
-    timer_interval = minutes
-    if timer_enabled:
-        start_timer()  # restart with new interval
 
 def _timer_loop():
     global timer_remaining, timer_enabled

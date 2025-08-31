@@ -1,3 +1,19 @@
+function toggleTimer() {
+  fetch('/toggle_timer', {method: 'POST'})
+    .then(res => res.json())
+    .then(data => console.log("Timer:", data));
+}
+
+function setTimerInterval() {
+  const minutes = document.getElementById('timerInterval').value;
+  fetch('/set_timer_interval', {
+    method: 'POST',
+    body: new URLSearchParams({minutes: minutes}),
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+  }).then(res => res.json())
+    .then(data => console.log("Interval set:", data));
+}
+
 async function toggleMute() {
     await fetch('/toggle_mute', { method: 'POST' });
     await refreshStatus();
@@ -41,6 +57,8 @@ async function refreshStatus() {
         document.getElementById('current_volume').innerText = data.volume;
         document.getElementById('volume_slider').value = data.volume;
         document.getElementById('mute_state').innerText = data.muted ? "ON" : "OFF";
+        document.getElementById('timer-status').innerText =
+            'Timer: ' + data.timer_status;
     } catch(e) {
         console.error('Status fetch failed', e);
     }

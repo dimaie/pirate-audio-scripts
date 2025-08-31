@@ -17,6 +17,13 @@
 	    <option value="{{ station.url }}">{{ station.label }}</option>
 	  {% endfor %}
 	</select>
+    <h3>Sleep Timer</h3>
+    <div id="timer-status" class="mt-2 text-green-600 text-sm">
+       Timer: {{ "OFF" if not timer_enabled else timer_remaining }}
+    </div>    
+    <button onclick="toggleTimer()">Toggle Timer</button>
+    <input type="number" id="timerInterval" value="30" min="1">
+    <button onclick="setTimerInterval()">Set Interval</button>
     <h2>Volume</h2>
     <p>Current: <span id="current_volume">{{ current_volume }}</span></p>
     <input id="volume_slider" type="range" 

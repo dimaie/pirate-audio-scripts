@@ -24,6 +24,9 @@ def index():
         current_volume=player.current_volume,
         volume_min=player.VOLUME_MIN,
         volume_max=player.VOLUME_MAX,
+        muted=player.is_muted,
+        timer_enabled=player.timer_enabled,
+        timer_remaining=max(0, int((player.timer_end - time.time())/60)) if player.timer_enabled else None,
     )
 
 @app.route("/set_url", methods=["POST"])
@@ -50,13 +53,25 @@ def status():
     return jsonify({
         "url": player.current_url,
         "volume": player.current_volume,
-        "muted": player.is_muted
+        "muted": player.is_muted,
+        "timer_status": player.get_timer_status()  # e.g., "OFF" or "12 min"
     })
 
 @app.route("/toggle_mute", methods=["POST"])
 def toggle_mute_route():
     player.toggle_mute()  # call the function in player.py
     return "OK", 200
+
+@app.route("/toggle_timer", methods=["POST"])
+def toggle_timer_route():
+    player.toggle_timer()
+    return jsonify({"enabled": player.timer_enabled, "remaining": player.timer_remaining})
+
+@app.route("/set_timer_interval", methods=["POST"])
+def set_timer_interval_route():
+    minutes = int(request.form["minutes"])
+    player.set_timer_interval(minutes)
+    return jsonify({"interval": player.timer_interval})
 
 def run_web():
     app.run(host="0.0.0.0", port=8080)
