@@ -9,7 +9,7 @@ import threading
 # ---- Backlight ----
 BACKLIGHT_PIN = 13
 backlight = LED(BACKLIGHT_PIN)
-backlight.on()
+backlight.on()  # turn on at startup
 
 # ---- Load config ----
 with open("config.json", "r") as f:
@@ -24,7 +24,6 @@ DISPLAY_TIMEOUT = 30  # seconds
 
 _last_activity = time.time()
 _display_on = True
-
 
 def reset_idle_timer():
     global _last_activity, _display_on
@@ -46,6 +45,7 @@ btn_c = Button(16)  # mute toggle
 # ---- VLC ----
 instance = vlc.Instance("--aout=alsa", "--alsa-audio-device=hw:1,0")
 player = instance.media_player_new()
+player._stopped_by_timer = False  # flag for display
 current_volume = DEFAULT_VOLUME
 
 # ---- Current stream ----
@@ -71,7 +71,6 @@ timer_enabled = False
 timer_end = None
 timer_interval = config["timer"]["interval"]  # minutes
 _timer_lock = threading.Lock()
-
 
 # ---- Display ----
 def update_display():
@@ -106,11 +105,10 @@ def update_display():
     draw.text(((240 - w) // 2, 70), timer_text, fill=(0, 255, 0), font=font)
 
     # stopped by timer
-    with _timer_lock:
-        if not timer_enabled and timer_end is None:
-            stop_text = "STOPPED BY TIMER"
-            w, _ = draw.textsize(stop_text, font=font)
-            draw.text(((240 - w) // 2, 90), stop_text, fill=(255, 0, 0), font=font)
+    if getattr(player, "_stopped_by_timer", False):
+        stop_text = "STOPPED BY TIMER"
+        w, _ = draw.textsize(stop_text, font=font)
+        draw.text(((240 - w) // 2, 90), stop_text, fill=(255, 0, 0), font=font)
 
     disp.display(img)
 
@@ -118,6 +116,8 @@ def update_display():
 # ---- Stream ----
 def play_stream(url):
     global current_url, current_label
+    player._stopped_by_timer = False  # clear flag on normal restart
+
     current_url = url
     current_label = url_to_label.get(url, "Unknown Station")
 
@@ -131,8 +131,6 @@ def play_stream(url):
 
 # ---- Mute ----
 is_muted = False
-
-
 def toggle_mute():
     global is_muted
     player.audio_toggle_mute()
@@ -169,7 +167,6 @@ def get_timer_status():
 
 def _monitor_timer():
     """Background thread that stops the player when timer expires."""
-    global timer_enabled, timer_end
     while True:
         expired = False
         with _timer_lock:
@@ -181,7 +178,8 @@ def _monitor_timer():
         if expired:
             try:
                 print("Timer fired")
-                player.stop()   # called outside lock
+                player._stopped_by_timer = True
+                player.stop()  # called outside lock
                 print("Player stopped by timer")
             except Exception as e:
                 print(f"Error stopping player: {e}")
