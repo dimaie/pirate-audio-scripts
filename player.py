@@ -9,7 +9,7 @@ import threading
 # ---- Backlight ----
 BACKLIGHT_PIN = 13
 backlight = LED(BACKLIGHT_PIN)
-backlight.on()  # turn on at startup
+backlight.on()
 
 # ---- Load config ----
 with open("config.json", "r") as f:
@@ -30,7 +30,7 @@ def reset_idle_timer():
     _last_activity = time.time()
     if not _display_on:
         _display_on = True
-        update_display()  # redraw screen
+        update_display()
 
 # Map url -> label
 url_to_label = {s["url"]: s["label"] for s in stations}
@@ -51,9 +51,7 @@ current_url = stations[0]["url"]
 current_label = stations[0]["label"]
 
 # ---- Display Setup ----
-disp = st7789.ST7789(
-    height=240, width=240, rotation=90, port=0, cs=1, dc=9, spi_speed_hz=80_000_000
-)
+disp = st7789.ST7789(height=240, width=240, rotation=90, port=0, cs=1, dc=9, spi_speed_hz=80_000_000)
 img = Image.new("RGB", (240, 240), color=(0, 0, 0))
 draw = ImageDraw.Draw(img)
 try:
@@ -65,6 +63,7 @@ except:
 timer_enabled = False
 timer_end = None
 timer_interval = config["timer"]["interval"]  # minutes
+_timer_lock = threading.Lock()
 
 # ---- Display ----
 def update_display():
@@ -74,7 +73,7 @@ def update_display():
         backlight.on()
         _display_on = True
 
-    img.paste((0, 0, 0), (0, 0, 240, 240))  # clear
+    img.paste((0, 0, 0), (0, 0, 240, 240))
 
     # station label
     text_width, _ = draw.textsize(current_label, font=font)
@@ -97,10 +96,11 @@ def update_display():
     draw.text(((240 - w)//2, 70), timer_text, fill=(0, 255, 0), font=font)
 
     # stopped by timer
-    if timer_enabled and timer_end and time.time() >= timer_end:
-        stop_text = "STOPPED BY TIMER"
-        w, _ = draw.textsize(stop_text, font=font)
-        draw.text(((240 - w)//2, 90), stop_text, fill=(255, 0, 0), font=font)
+    with _timer_lock:
+        if timer_enabled and timer_end and time.time() >= timer_end:
+            stop_text = "STOPPED BY TIMER"
+            w, _ = draw.textsize(stop_text, font=font)
+            draw.text(((240 - w)//2, 90), stop_text, fill=(255, 0, 0), font=font)
 
     disp.display(img)
 
@@ -143,21 +143,37 @@ def volume_down():
 
 # ---- Timer ----
 def get_timer_status():
-    if timer_enabled and timer_end is not None:
-        remaining = max(0, int((timer_end - time.time()) / 60))
-        return f"ON ({remaining} min left)"
+    with _timer_lock:
+        if timer_enabled and timer_end is not None:
+            remaining = max(0, int((timer_end - time.time()) / 60))
+            return f"ON ({remaining} min left)"
     return "OFF"
+
+def _monitor_timer():
+    """Background thread that stops the player when timer expires."""
+    global timer_enabled, timer_end
+    while True:
+        with _timer_lock:
+            if timer_enabled and timer_end is not None and time.time() >= timer_end:
+                player.stop()
+                stop_timer()
+                update_display()  # refresh display immediately
+        time.sleep(1)
+
+threading.Thread(target=_monitor_timer, daemon=True).start()
 
 def start_timer():
     global timer_enabled, timer_end
-    timer_enabled = True
-    timer_end = time.time() + (timer_interval * 60)
+    with _timer_lock:
+        timer_enabled = True
+        timer_end = time.time() + (timer_interval * 60)
     update_display()
 
 def stop_timer():
     global timer_enabled, timer_end
-    timer_enabled = False
-    timer_end = None
+    with _timer_lock:
+        timer_enabled = False
+        timer_end = None
     update_display()
 
 def toggle_timer():
@@ -170,7 +186,7 @@ def set_timer_interval(minutes):
     global timer_interval
     timer_interval = minutes
     if timer_enabled:
-        start_timer()  # restart with new interval
+        start_timer()
 
 button_timer.when_pressed = toggle_timer
 
@@ -193,3 +209,4 @@ btn_c.when_pressed = toggle_mute
 # ---- Initial playback ----
 play_stream(current_url)
 update_display()
+
