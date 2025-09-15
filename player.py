@@ -32,7 +32,6 @@ def reset_idle_timer():
         _display_on = True
         update_display()
 
-
 # Map url -> label
 url_to_label = {s["url"]: s["label"] for s in stations}
 
@@ -45,7 +44,6 @@ btn_c = Button(16)  # mute toggle
 # ---- VLC ----
 instance = vlc.Instance("--aout=alsa", "--alsa-audio-device=hw:1,0")
 player = instance.media_player_new()
-player._stopped_by_timer = False  # flag for display
 current_volume = DEFAULT_VOLUME
 
 # ---- Current stream ----
@@ -105,21 +103,23 @@ def update_display():
     draw.text(((240 - w) // 2, 70), timer_text, fill=(0, 255, 0), font=font)
 
     # stopped by timer
-    if getattr(player, "_stopped_by_timer", False):
-        stop_text = "STOPPED BY TIMER"
-        w, _ = draw.textsize(stop_text, font=font)
-        draw.text(((240 - w) // 2, 90), stop_text, fill=(255, 0, 0), font=font)
+    with _timer_lock:
+        if not timer_enabled and timer_end is None and getattr(player, "_stopped_by_timer", False):
+            stop_text = "STOPPED BY TIMER"
+            w, _ = draw.textsize(stop_text, font=font)
+            draw.text(((240 - w) // 2, 90), stop_text, fill=(255, 0, 0), font=font)
 
     disp.display(img)
-
 
 # ---- Stream ----
 def play_stream(url):
     global current_url, current_label
-    player._stopped_by_timer = False  # clear flag on normal restart
-
     current_url = url
     current_label = url_to_label.get(url, "Unknown Station")
+
+    # Clear STOPPED_BY_TIMER flag on new playback
+    if hasattr(player, "_stopped_by_timer"):
+        player._stopped_by_timer = False
 
     media = instance.media_new(url, "network-caching=1500")
     player.set_media(media)
@@ -127,7 +127,6 @@ def play_stream(url):
     time.sleep(1)
     player.audio_set_volume(current_volume)
     update_display()
-
 
 # ---- Mute ----
 is_muted = False
@@ -138,7 +137,6 @@ def toggle_mute():
     update_display()
     print(f"Muted: {is_muted}")
 
-
 # ---- Volume ----
 def volume_up():
     global current_volume
@@ -147,14 +145,12 @@ def volume_up():
     update_display()
     print(f"Volume up: {current_volume}")
 
-
 def volume_down():
     global current_volume
     current_volume = max(VOLUME_MIN, current_volume - VOLUME_STEP)
     player.audio_set_volume(current_volume)
     update_display()
     print(f"Volume down: {current_volume}")
-
 
 # ---- Timer ----
 def get_timer_status():
@@ -164,9 +160,9 @@ def get_timer_status():
             return f"ON ({remaining} min left)"
     return "OFF"
 
-
 def _monitor_timer():
     """Background thread that stops the player when timer expires."""
+    global timer_enabled, timer_end
     while True:
         expired = False
         with _timer_lock:
@@ -187,9 +183,7 @@ def _monitor_timer():
 
         time.sleep(1)
 
-
 threading.Thread(target=_monitor_timer, daemon=True).start()
-
 
 def start_timer():
     global timer_enabled, timer_end
@@ -198,7 +192,6 @@ def start_timer():
         timer_end = time.time() + (timer_interval * 60)
     update_display()
 
-
 def stop_timer():
     global timer_enabled, timer_end
     with _timer_lock:
@@ -206,13 +199,11 @@ def stop_timer():
         timer_end = None
     update_display()
 
-
 def toggle_timer():
     if timer_enabled:
         stop_timer()
     else:
         start_timer()
-
 
 def set_timer_interval(minutes):
     global timer_interval
@@ -220,9 +211,7 @@ def set_timer_interval(minutes):
     if timer_enabled:
         start_timer()
 
-
 button_timer.when_pressed = toggle_timer
-
 
 # ---- Idle display monitor ----
 def idle_display_monitor():
@@ -233,15 +222,12 @@ def idle_display_monitor():
             _display_on = False
         time.sleep(1)
 
-
 threading.Thread(target=idle_display_monitor, daemon=True).start()
-
 
 # ---- Button events ----
 btn_a.when_pressed = volume_down
 btn_b.when_pressed = volume_up
 btn_c.when_pressed = toggle_mute
-
 
 # ---- Initial playback ----
 play_stream(current_url)
