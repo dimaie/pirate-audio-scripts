@@ -1,18 +1,16 @@
 import vlc
 import time
-from gpiozero import Button
+from gpiozero import Button, LED
 from PIL import Image, ImageDraw, ImageFont
 import st7789
 import json
-import time
 import threading
-from gpiozero import LED
 
-BACKLIGHT_PIN = 13  # adjust to your board
+# ---- Backlight ----
+BACKLIGHT_PIN = 13
 backlight = LED(BACKLIGHT_PIN)
+backlight.on()  # turn on at startup
 
-# turn on at startup
-backlight.on()
 # ---- Load config ----
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -22,8 +20,8 @@ VOLUME_MIN = config["volume"]["min"]
 VOLUME_MAX = config["volume"]["max"]
 VOLUME_STEP = config["volume"]["step"]
 DEFAULT_VOLUME = config["volume"]["default"]
-
 DISPLAY_TIMEOUT = 30  # seconds
+
 _last_activity = time.time()
 _display_on = True
 
@@ -34,15 +32,16 @@ def reset_idle_timer():
         _display_on = True
         update_display()  # redraw screen
 
-# Map url -> label for quick lookup
+# Map url -> label
 url_to_label = {s["url"]: s["label"] for s in stations}
 
-# ---- Pirate Audio button pins (BCM numbering) ----
+# ---- Buttons ----
 button_timer = Button(24)
-btn_a = Button(5)   # Volume down
-btn_b = Button(6)   # Volume up
-btn_c = Button(16)
-# ---- VLC Setup ----
+btn_a = Button(5)  # volume down
+btn_b = Button(6)  # volume up
+btn_c = Button(16) # mute toggle
+
+# ---- VLC ----
 instance = vlc.Instance("--aout=alsa", "--alsa-audio-device=hw:1,0")
 player = instance.media_player_new()
 current_volume = DEFAULT_VOLUME
@@ -53,62 +52,59 @@ current_label = stations[0]["label"]
 
 # ---- Display Setup ----
 disp = st7789.ST7789(
-    height=240,
-    width=240,
-    rotation=90,
-    port=0,
-    cs=1,
-    dc=9,
-    spi_speed_hz=80_000_000
+    height=240, width=240, rotation=90, port=0, cs=1, dc=9, spi_speed_hz=80_000_000
 )
-
 img = Image.new("RGB", (240, 240), color=(0, 0, 0))
 draw = ImageDraw.Draw(img)
-
-# Load slightly smaller font
 try:
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
 except:
-    font = None  # fallback to default font
+    font = None
 
+# ---- Timer state ----
+timer_enabled = False
+timer_end = None
+timer_interval = config["timer"]["interval"]  # minutes
+
+# ---- Display ----
 def update_display():
     global _last_activity, _display_on
-    global timer_enabled, timer_end
-    # Reset idle timer whenever we redraw
     _last_activity = time.time()
     if not _display_on:
-        backlight.on()   # turn backlight on
+        backlight.on()
         _display_on = True
 
-    img.paste((0, 0, 0), (0, 0, 240, 240))  # clear screen
+    img.paste((0, 0, 0), (0, 0, 240, 240))  # clear
 
-    # Draw station label centered horizontally
-    text_width, text_height = draw.textsize(current_label, font=font)
-    text_x = (240 - text_width) // 2
-    draw.text((text_x, 20), current_label, fill=(0, 255, 0), font=font)
+    # station label
+    text_width, _ = draw.textsize(current_label, font=font)
+    draw.text(((240 - text_width)//2, 20), current_label, fill=(0, 255, 0), font=font)
 
-    # Optional: display mute status
+    # mute
     if is_muted:
         mute_text = "MUTED"
         text_width, _ = draw.textsize(mute_text, font=font)
-        draw.text(((240 - text_width) // 2, 50), mute_text, fill=(0, 255, 0), font=font)
+        draw.text(((240 - text_width)//2, 50), mute_text, fill=(0, 255, 0), font=font)
 
-    # Draw volume bar
+    # volume bar
     bar_max_width = 180
     bar_width = int((current_volume / VOLUME_MAX) * bar_max_width)
-    bar_height = 5
-    bar_x = (240 - bar_max_width) // 2
-    bar_y = 40
-    draw.rectangle((bar_x, bar_y, bar_x + bar_width, bar_y + bar_height), fill=(0, 255, 0))
+    draw.rectangle(((30, 40), (30 + bar_width, 45)), fill=(0, 255, 0))
 
-    # Timer
-    timer_text = f"Timer: " + get_timer_status()
+    # timer
+    timer_text = f"Timer: {get_timer_status()}"
     w, _ = draw.textsize(timer_text, font=font)
     draw.text(((240 - w)//2, 70), timer_text, fill=(0, 255, 0), font=font)
 
+    # stopped by timer
+    if timer_enabled and timer_end and time.time() >= timer_end:
+        stop_text = "STOPPED BY TIMER"
+        w, _ = draw.textsize(stop_text, font=font)
+        draw.text(((240 - w)//2, 90), stop_text, fill=(255, 0, 0), font=font)
+
     disp.display(img)
 
-# ---- Stream Control ----
+# ---- Stream ----
 def play_stream(url):
     global current_url, current_label
     current_url = url
@@ -119,12 +115,10 @@ def play_stream(url):
     player.play()
     time.sleep(1)
     player.audio_set_volume(current_volume)
-
-    # Update the Pirate Audio screen
     update_display()
 
+# ---- Mute ----
 is_muted = False
-
 def toggle_mute():
     global is_muted
     player.audio_toggle_mute()
@@ -132,7 +126,7 @@ def toggle_mute():
     update_display()
     print(f"Muted: {is_muted}")
 
-# ---- Button Handlers ----
+# ---- Volume ----
 def volume_up():
     global current_volume
     current_volume = min(VOLUME_MAX, current_volume + VOLUME_STEP)
@@ -147,19 +141,12 @@ def volume_down():
     update_display()
     print(f"Volume down: {current_volume}")
 
-# --- Timer state ---
-timer_enabled = False
-timer_end = None
-timer_remaining = 0
-timer_interval = config["timer"]["interval"]  # minutes (from config.json)
-
+# ---- Timer ----
 def get_timer_status():
-    global timer_enabled, timer_end
     if timer_enabled and timer_end is not None:
         remaining = max(0, int((timer_end - time.time()) / 60))
         return f"ON ({remaining} min left)"
-    else:
-        return "OFF"
+    return "OFF"
 
 def start_timer():
     global timer_enabled, timer_end
@@ -174,7 +161,6 @@ def stop_timer():
     update_display()
 
 def toggle_timer():
-    global timer_enabled
     if timer_enabled:
         stop_timer()
     else:
@@ -186,31 +172,24 @@ def set_timer_interval(minutes):
     if timer_enabled:
         start_timer()  # restart with new interval
 
-def _timer_loop():
-    global timer_remaining, timer_enabled
-    while timer_enabled and timer_remaining > 0:
-        time.sleep(60)
-        timer_remaining -= 1
-        update_display()
-        if timer_remaining <= 0:
-            player.stop()
-            stop_timer()
-
 button_timer.when_pressed = toggle_timer
-# Background thread to turn off display after idle
+
+# ---- Idle display monitor ----
 def idle_display_monitor():
     global _display_on
     while True:
         if _display_on and time.time() - _last_activity > DISPLAY_TIMEOUT:
-            backlight.off()   # turn off backlight
+            backlight.off()
             _display_on = False
         time.sleep(1)
 
 threading.Thread(target=idle_display_monitor, daemon=True).start()
 
+# ---- Button events ----
 btn_a.when_pressed = volume_down
 btn_b.when_pressed = volume_up
 btn_c.when_pressed = toggle_mute
-# ---- Initial Playback ----
+
+# ---- Initial playback ----
 play_stream(current_url)
 update_display()

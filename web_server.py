@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 import threading
 import player
 import logging
+import time
 
 app = Flask(__name__)
 
@@ -17,6 +18,10 @@ werk_logger.addFilter(FilterPath())
 
 @app.route("/")
 def index():
+    remaining = None
+    if player.timer_enabled and player.timer_end is not None:
+        remaining = max(0, int((player.timer_end - time.time()) / 60))
+
     return render_template(
         "index.html",
         presets=player.stations,        # reuse parsed stations
@@ -26,7 +31,7 @@ def index():
         volume_max=player.VOLUME_MAX,
         muted=player.is_muted,
         timer_enabled=player.timer_enabled,
-        timer_remaining=max(0, int((player.timer_end - time.time())/60)) if player.timer_enabled else None,
+        timer_remaining=remaining,
     )
 
 @app.route("/set_url", methods=["POST"])
@@ -54,18 +59,21 @@ def status():
         "url": player.current_url,
         "volume": player.current_volume,
         "muted": player.is_muted,
-        "timer_status": player.get_timer_status()  # e.g., "OFF" or "12 min"
+        "timer_status": player.get_timer_status()  # e.g., "OFF" or "ON (12 min left)"
     })
 
 @app.route("/toggle_mute", methods=["POST"])
 def toggle_mute_route():
-    player.toggle_mute()  # call the function in player.py
+    player.toggle_mute()
     return "OK", 200
 
 @app.route("/toggle_timer", methods=["POST"])
 def toggle_timer_route():
     player.toggle_timer()
-    return jsonify({"enabled": player.timer_enabled, "remaining": player.timer_remaining})
+    remaining = None
+    if player.timer_enabled and player.timer_end is not None:
+        remaining = max(0, int((player.timer_end - time.time()) / 60))
+    return jsonify({"enabled": player.timer_enabled, "remaining": remaining})
 
 @app.route("/set_timer_interval", methods=["POST"])
 def set_timer_interval_route():
@@ -78,7 +86,6 @@ def run_web():
 
 if __name__ == "__main__":
     threading.Thread(target=run_web, daemon=True).start()
-    import time
     try:
         while True:
             time.sleep(1)
