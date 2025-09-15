@@ -9,7 +9,7 @@ import threading
 # ---- Backlight ----
 BACKLIGHT_PIN = 13
 backlight = LED(BACKLIGHT_PIN)
-backlight.on()
+backlight.on()  # turn on at startup
 
 # ---- Load config ----
 with open("config.json", "r") as f:
@@ -155,9 +155,13 @@ def _monitor_timer():
     while True:
         with _timer_lock:
             if timer_enabled and timer_end is not None and time.time() >= timer_end:
-                player.stop()
+                try:
+                    player.stop()
+                    print("Player stopped")
+                except Exception as e:
+                    print(f"Error stopping VLC: {e}")
                 stop_timer()
-                update_display()  # refresh display immediately
+                update_display()
         time.sleep(1)
 
 threading.Thread(target=_monitor_timer, daemon=True).start()
@@ -186,7 +190,7 @@ def set_timer_interval(minutes):
     global timer_interval
     timer_interval = minutes
     if timer_enabled:
-        start_timer()
+        start_timer()  # restart with new interval
 
 button_timer.when_pressed = toggle_timer
 
@@ -209,4 +213,3 @@ btn_c.when_pressed = toggle_mute
 # ---- Initial playback ----
 play_stream(current_url)
 update_display()
-
