@@ -1,12 +1,26 @@
-from flask import Flask, request, jsonify, render_template
 import threading
-import player
-import logging
 import time
+import logging
+import json
+import importlib
+from flask import Flask, request, jsonify, render_template
+import os
 
 app = Flask(__name__)
 
-# Suppress werkzeug INFO logs for specific paths
+# ---- Load configuration ----
+CONFIG_FILE = "config.json"
+try:
+    with open(CONFIG_FILE, "r") as f:
+        config = json.load(f)
+except FileNotFoundError:
+    config = {}
+
+# Determine which player to load
+PLAYER_MODULE_NAME = config.get("player_module", "player")  # default to 'player'
+player = importlib.import_module(PLAYER_MODULE_NAME)
+
+# ---- Suppress werkzeug INFO logs for specific paths ----
 class FilterPath(logging.Filter):
     def filter(self, record):
         if any(path in record.getMessage() for path in ['/status']):
@@ -16,6 +30,8 @@ class FilterPath(logging.Filter):
 werk_logger = logging.getLogger('werkzeug')
 werk_logger.addFilter(FilterPath())
 
+# ---- Flask routes ----
+
 @app.route("/")
 def index():
     remaining = None
@@ -24,13 +40,13 @@ def index():
 
     return render_template(
         "index.html",
-        presets=player.stations,        # reuse parsed stations
-        current_url=player.current_url,
-        current_volume=player.current_volume,
-        volume_min=player.VOLUME_MIN,
-        volume_max=player.VOLUME_MAX,
-        muted=player.is_muted,
-        timer_enabled=player.timer_enabled,
+        presets=getattr(player, "stations", []),
+        current_url=getattr(player, "current_url", ""),
+        current_volume=getattr(player, "current_volume", 0),
+        volume_min=getattr(player, "VOLUME_MIN", 0),
+        volume_max=getattr(player, "VOLUME_MAX", 100),
+        muted=getattr(player, "is_muted", False),
+        timer_enabled=getattr(player, "timer_enabled", False),
         timer_remaining=remaining,
     )
 
@@ -59,7 +75,7 @@ def status():
         "url": player.current_url,
         "volume": player.current_volume,
         "muted": player.is_muted,
-        "timer_status": player.get_timer_status()  # e.g., "OFF" or "ON (12 min left)"
+        "timer_status": player.get_timer_status()
     })
 
 @app.route("/toggle_mute", methods=["POST"])
@@ -81,6 +97,7 @@ def set_timer_interval_route():
     player.set_timer_interval(minutes)
     return jsonify({"interval": player.timer_interval})
 
+# ---- Web server thread ----
 def run_web():
     app.run(host="0.0.0.0", port=8080)
 
