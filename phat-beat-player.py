@@ -5,15 +5,31 @@ import json
 import threading
 import phatbeat_gpiozero as phatbeat
 
-# ---- Load config ----
-with open("config.json", "r") as f:
-    config = json.load(f)
+# ===============================
+# Global variables and constants
+# ===============================
+config = None
+stations = []
+station_index = 0
+current_url = None
+current_label = None
 
-stations = config["stations"]
-VOLUME_MIN = config["volume"]["min"]
-VOLUME_MAX = config["volume"]["max"]
-VOLUME_STEP = config["volume"]["step"]
-DEFAULT_VOLUME = config["volume"]["default"]
+instance = None
+player = None
+current_volume = 100
+is_muted = False
+
+timer_interval = 30
+timer_enabled = False
+timer_end = None
+_timer_lock = threading.Lock()
+initialized = False
+
+# ---- Default Volume limits ----
+VOLUME_MIN = 0
+VOLUME_MAX = 200
+VOLUME_STEP = 10
+DEFAULT_VOLUME = 100
 
 # ---- Button pin numbers (BCM) ----
 BTN_REWIND = 13
@@ -23,25 +39,73 @@ BTN_VOLUP = 16
 BTN_VOLDN = 26
 BTN_ONOFF = 12
 
-# ---- VLC setup ----
-instance = vlc.Instance("--aout=alsa", "--alsa-audio-device=hw:1,0")
-player = instance.media_player_new()
-current_volume = DEFAULT_VOLUME
-player.audio_set_volume(current_volume)
 
-# ---- Current station state ----
-station_index = 0
-current_url = stations[station_index]["url"]
-current_label = stations[station_index]["label"]
-is_muted = False
+# ===============================
+# Initialization
+# ===============================
+def init(cfg):
+    """Initialize player state and hardware, but do not start playback."""
+    global config, stations, instance, player
+    global VOLUME_MIN, VOLUME_MAX, VOLUME_STEP, DEFAULT_VOLUME
+    global timer_interval, current_volume, initialized
 
-# ---- LED helpers ----
+    config = cfg
+
+    # --- Load config values ---
+    stations = config["stations"]
+    VOLUME_MIN = config["volume"]["min"]
+    VOLUME_MAX = config["volume"]["max"]
+    VOLUME_STEP = config["volume"]["step"]
+    DEFAULT_VOLUME = config["volume"]["default"]
+    current_volume = DEFAULT_VOLUME
+    timer_interval = config["timer"]["interval"]
+
+    # --- Initialize hardware and VLC ---
+    instance = vlc.Instance("--aout=alsa", "--alsa-audio-device=hw:1,0")
+    player = instance.media_player_new()
+    player.audio_set_volume(DEFAULT_VOLUME)
+
+    # --- Clear LEDs ---
+    phatbeat.clear()
+    phatbeat.show()
+
+    # --- Start timer thread ---
+    threading.Thread(target=_monitor_timer, daemon=True).start()
+
+    # --- Register button handlers ---
+    phatbeat.on(BTN_FFWD)(handle_next)
+    phatbeat.on(BTN_REWIND)(handle_prev)
+    phatbeat.on(BTN_PLAYPAUSE)(handle_play_pause)
+    phatbeat.on(BTN_VOLUP)(handle_vol_up)
+    phatbeat.on(BTN_VOLDN)(handle_vol_down)
+    phatbeat.on(BTN_ONOFF)(handle_timer)
+
+    initialized = True
+    print("pHAT BEAT player initialized — ready for playback.")
+    start_playback()
+
+def start_playback():
+    """Begin playback of the first station after initialization."""
+    if not initialized:
+        raise RuntimeError("Player not initialized — call init(cfg) first.")
+
+    global station_index
+    station_index = 0
+    play_stream(stations[station_index]["url"])
+    print("Playback started.")
+
+
+# ===============================
+# LED helpers
+# ===============================
 def led_flash(color, duration=0.18):
-    phatbeat.set_all(*color, brightness=0.5)
+    r, g, b = color
+    phatbeat.set_all(r, g, b, brightness=0.5)
     phatbeat.show()
     time.sleep(duration)
     phatbeat.clear()
     phatbeat.show()
+
 
 def led_pulse(color, steps=8, hold=0.02):
     r, g, b = color
@@ -58,9 +122,15 @@ def led_pulse(color, steps=8, hold=0.02):
     phatbeat.clear()
     phatbeat.show()
 
-# ---- Playback control ----
+
+# ===============================
+# Playback controls
+# ===============================
 def play_stream(url):
     global current_url, current_label
+    if not initialized:
+        raise RuntimeError("Player not initialized.")
+
     current_url = url
     current_label = next((s["label"] for s in stations if s["url"] == url), "Unknown")
     media = instance.media_new(url, "network-caching=1500")
@@ -70,17 +140,20 @@ def play_stream(url):
     player.audio_set_volume(current_volume)
     print(f"Playing: {current_label}")
 
+
 def next_station():
     global station_index
     station_index = (station_index + 1) % len(stations)
     led_flash((255, 0, 0))
     play_stream(stations[station_index]["url"])
 
+
 def prev_station():
     global station_index
     station_index = (station_index - 1) % len(stations)
     led_flash((255, 0, 255))
     play_stream(stations[station_index]["url"])
+
 
 def toggle_mute():
     global is_muted
@@ -89,6 +162,7 @@ def toggle_mute():
     led_pulse((255, 200, 0), steps=6, hold=0.03)
     print("Muted" if is_muted else "Unmuted")
 
+
 def volume_up():
     global current_volume
     current_volume = min(VOLUME_MAX, current_volume + VOLUME_STEP)
@@ -96,29 +170,22 @@ def volume_up():
     led_flash((0, 255, 0))
     print("Volume up:", current_volume)
 
+
 def volume_down():
     global current_volume
     current_volume = max(VOLUME_MIN, current_volume - VOLUME_STEP)
     player.audio_set_volume(current_volume)
     led_flash((0, 0, 255))
     print("Volume down:", current_volume)
-# ---- Update display ----
-def update_display():
-    # No actual screen, just a placeholder
-    pass
-# ---- Timer status helper ----
-def get_timer_status():
-    with _timer_lock:
-        if timer_enabled and timer_end is not None:
-            remaining = max(0, int((timer_end - time.time()) / 60))
-            return f"ON ({remaining} min left)"
-    return "OFF"
-# ---- Timer support ----
-timer_enabled = False
-timer_end = None
-timer_interval = config["timer"]["interval"]
-_timer_lock = threading.Lock()
 
+
+def update_display():
+    pass  # No display hardware
+
+
+# ===============================
+# Timer logic
+# ===============================
 def _monitor_timer():
     global timer_enabled, timer_end
     while True:
@@ -134,7 +201,13 @@ def _monitor_timer():
             led_flash((255, 0, 0))
         time.sleep(1)
 
-threading.Thread(target=_monitor_timer, daemon=True).start()
+def set_timer_interval(minutes):
+    """Update the sleep timer interval."""
+    global timer_interval
+    with _timer_lock:
+        timer_interval = minutes
+    print(f"Timer interval set to {minutes} minutes")
+
 
 def toggle_timer():
     global timer_enabled, timer_end
@@ -150,30 +223,21 @@ def toggle_timer():
             led_flash((0, 128, 0))
             print(f"Timer started for {timer_interval} min")
 
-# ---- Hook up buttons ----
-@phatbeat.on(BTN_FFWD)
+
+def get_timer_status():
+    with _timer_lock:
+        if timer_enabled and timer_end is not None:
+            remaining = max(0, int((timer_end - time.time()) / 60))
+            return f"ON ({remaining} min left)"
+    return "OFF"
+
+
+# ===============================
+# Button callbacks
+# ===============================
 def handle_next(pin): next_station()
-
-@phatbeat.on(BTN_REWIND)
 def handle_prev(pin): prev_station()
-
-@phatbeat.on(BTN_PLAYPAUSE)
 def handle_play_pause(pin): toggle_mute()
-
-@phatbeat.on(BTN_VOLUP)
 def handle_vol_up(pin): volume_up()
-
-@phatbeat.on(BTN_VOLDN)
 def handle_vol_down(pin): volume_down()
-
-@phatbeat.on(BTN_ONOFF)
 def handle_timer(pin): toggle_timer()
-
-# ---- Initial setup ----
-phatbeat.clear()
-phatbeat.show()
-play_stream(current_url)
-
-print("pHAT BEAT player ready — buttons active.")
-
-# No infinite loop — player is fully event-driven for web server

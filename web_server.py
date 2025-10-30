@@ -9,13 +9,18 @@ import os
 app = Flask(__name__)
 
 # ---- Load configuration ----
-CONFIG_FILE = "config.json"
-try:
-    with open(CONFIG_FILE, "r") as f:
-        config = json.load(f)
-except FileNotFoundError:
-    config = {}
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+with open(CONFIG_PATH, "r") as f:
+    config = json.load(f)
 
+PLAYER_MODULE_NAME = config.get("player_module", "player")
+player = importlib.import_module(PLAYER_MODULE_NAME)
+
+# initialize the player with configuration
+if hasattr(player, "init"):
+    player.init(config)
+else:
+    print(f"Warning: {PLAYER_MODULE_NAME} has no init(config) function")
 # Determine which player to load
 PLAYER_MODULE_NAME = config.get("player_module", "player")  # default to 'player'
 player = importlib.import_module(PLAYER_MODULE_NAME)
