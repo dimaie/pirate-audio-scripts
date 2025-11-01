@@ -1,3 +1,42 @@
+async function addPreset() {
+  const url = document.getElementById('stream_url').value.trim();
+  if (!url) {
+    alert('Please enter a stream URL first.');
+    return;
+  }
+
+  const name = prompt('Enter a name for this station:');
+  if (!name) return;
+
+  try {
+    const res = await fetch('/add_preset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({label: name, url: url})
+    });
+
+    if (res.ok) {
+      alert('Preset added successfully.');
+
+      // Add the new preset to the dropdown without reloading
+      const select = document.getElementById('preset_select');
+      const option = document.createElement('option');
+      option.value = url;
+      option.textContent = name;
+      select.appendChild(option);
+
+      // Optionally select the newly added one
+      select.value = url;
+    } else {
+      const msg = await res.text();
+      alert('Failed to add preset: ' + msg);
+    }
+  } catch (e) {
+    console.error('Add preset failed:', e);
+    alert('Error adding preset.');
+  }
+}
+
 function toggleTimer() {
   fetch('/toggle_timer', {method: 'POST'})
     .then(res => res.json())

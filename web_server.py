@@ -55,6 +55,23 @@ def index():
         supports_save=supports_save
     )
 
+# In Flask route
+@app.route("/add_preset", methods=["POST"])
+def add_preset():
+    label = request.form.get("label")
+    url = request.form.get("url")
+    if not label or not url:
+        return "Missing label or URL", 400
+
+    # avoid duplicates
+    if any(s["url"] == url for s in config["stations"]):
+        return "Preset already exists", 409
+
+    config["stations"].append({"label": label, "url": url})
+    if hasattr(player, "save_config"):
+        player.save_config()
+    return "OK", 200
+
 @app.route("/set_url", methods=["POST"])
 def set_url():
     url = request.form.get("url")

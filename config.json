@@ -1,4 +1,5 @@
 {
+  "player_module": "phat-beat-player",
   "stations": [
     {
       "label": "BBC World Service",
@@ -15,6 +16,18 @@
     {
       "label": "Classic FM UK",
       "url": "http://media-ice.musicradio.com/ClassicFMMP3"
+    },
+    {
+      "label": "80er Hits",
+      "url": "http://stream.rtlradio.de/80/mp3-192/"
+    },
+    {
+      "label": "80s Alive",
+      "url": "https://stream.80sa.live/80s-alive.mp3"
+    },
+    {
+      "label": "1A Relax",
+      "url": "https://1a-relax.radionetz.de/1a-relax.mp3"
     }
   ],
   "volume": {
