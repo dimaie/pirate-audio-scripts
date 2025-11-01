@@ -64,4 +64,19 @@ async function refreshStatus() {
     }
 }
 
+async function saveSettings() {
+    try {
+        const res = await fetch('/save_settings', { method: 'POST' });
+        if (res.ok) {
+            alert("Settings saved successfully!");
+        } else {
+            const text = await res.text();
+            alert("Error saving settings: " + text);
+        }
+    } catch(e) {
+        console.error('Save failed', e);
+        alert('Save failed: ' + e.message);
+    }
+}
+
 setInterval(refreshStatus, 1000); // poll every second

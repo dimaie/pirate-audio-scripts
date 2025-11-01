@@ -4,7 +4,9 @@ import time
 import json
 import threading
 import phatbeat_gpiozero as phatbeat
-
+import os
+import tempfile
+import shutil
 # ===============================
 # Global variables and constants
 # ===============================
@@ -182,7 +184,38 @@ def volume_down():
 def update_display():
     pass  # No display hardware
 
+def save_config():
+    """Persist current settings (volume, timer interval, stations) to config.json."""
+    global config, current_volume, timer_interval, stations
 
+    if config is None:
+        print("Cannot save: configuration not loaded.")
+        return False
+
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    tmp_path = config_path + ".tmp"
+
+    # Update config with current state
+    config["volume"]["default"] = current_volume
+    config["timer"]["interval"] = timer_interval
+    config["stations"] = stations
+
+    try:
+        # Write atomically
+        with open(tmp_path, "w") as f:
+            json.dump(config, f, indent=2)
+        shutil.move(tmp_path, config_path)
+        print(f"Configuration saved to {config_path}")
+        return True
+    except Exception as e:
+        print(f"Failed to save configuration: {e}")
+        return False
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 # ===============================
 # Timer logic
 # ===============================

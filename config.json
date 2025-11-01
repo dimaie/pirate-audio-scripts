@@ -21,7 +21,7 @@
     "min": 0,
     "max": 200,
     "step": 10,
-    "default": 100
+    "default": 28
   },
   "server": {
     "host": "0.0.0.0",

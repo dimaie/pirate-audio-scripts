@@ -16,14 +16,13 @@ with open(CONFIG_PATH, "r") as f:
 PLAYER_MODULE_NAME = config.get("player_module", "player")
 player = importlib.import_module(PLAYER_MODULE_NAME)
 
-# initialize the player with configuration
-if hasattr(player, "init"):
-    player.init(config)
-else:
-    print(f"Warning: {PLAYER_MODULE_NAME} has no init(config) function")
+# ---- Detect if player supports saving configuration ----
+supports_save = hasattr(player, "save_config")
 # Determine which player to load
 PLAYER_MODULE_NAME = config.get("player_module", "player")  # default to 'player'
 player = importlib.import_module(PLAYER_MODULE_NAME)
+
+player.init(config)
 
 # ---- Suppress werkzeug INFO logs for specific paths ----
 class FilterPath(logging.Filter):
@@ -53,6 +52,7 @@ def index():
         muted=getattr(player, "is_muted", False),
         timer_enabled=getattr(player, "timer_enabled", False),
         timer_remaining=remaining,
+        supports_save=supports_save
     )
 
 @app.route("/set_url", methods=["POST"])
@@ -101,6 +101,17 @@ def set_timer_interval_route():
     minutes = int(request.form["minutes"])
     player.set_timer_interval(minutes)
     return jsonify({"interval": player.timer_interval})
+
+@app.route("/save_settings", methods=["POST"])
+def save_settings():
+    if not supports_save:
+        return "Save not supported", 400
+    try:
+        # optional: pass the current config or player state
+        player.save_config()
+        return "Settings saved", 200
+    except Exception as e:
+        return f"Error saving settings: {e}", 500
 
 # ---- Web server thread ----
 def run_web():

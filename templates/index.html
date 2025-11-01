@@ -29,5 +29,9 @@
     <input id="volume_slider" type="range" 
            min="{{ volume_min }}" max="{{ volume_max }}" 
            value="{{ current_volume }}" oninput="volumeChanged(event)">
+    {% if supports_save %}
+    <h2>Settings</h2>
+    <button onclick="saveSettings()">Save Settings</button>
+    {% endif %}
   </body>
 </html>
