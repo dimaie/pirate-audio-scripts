@@ -27,9 +27,33 @@
     <button onclick="setTimerInterval()">Set Interval</button>
     <h2>Volume</h2>
     <p>Current: <span id="current_volume">{{ current_volume }}</span></p>
+<style>
+#volume_slider {
+  width: 400px;   /* increase slider length */
+  height: 20px;   /* increase thickness of the slider track */
+}
+
+/* Optional: increase size of the thumb (handle) */
+#volume_slider::-webkit-slider-thumb {
+  width: 25px;
+  height: 25px;
+  background: #4CAF50;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+#volume_slider::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  background: #4CAF50;
+  border-radius: 50%;
+  cursor: pointer;
+}
+</style>
     <input id="volume_slider" type="range" 
-           min="{{ volume_min }}" max="{{ volume_max }}" 
-           value="{{ current_volume }}" oninput="volumeChanged(event)">
+       min="{{ volume_min }}" max="{{ volume_max }}" 
+       value="{{ current_volume }}" oninput="volumeChanged(event)">
+
     {% if supports_save %}
     <h2>Settings</h2>
     <button onclick="saveSettings()">Save Settings</button>
