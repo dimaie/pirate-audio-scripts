@@ -4,6 +4,7 @@ import time
 import json
 import threading
 import phatbeat_gpiozero as phatbeat
+from gpiozero import Button
 import os
 import tempfile
 import shutil
@@ -75,7 +76,10 @@ def init(cfg):
     threading.Thread(target=_monitor_timer, daemon=True).start()
 
     # --- Register button handlers ---
-    phatbeat.on(BTN_FFWD)(handle_next)
+    btn_next = Button(BTN_FFWD)
+    btn_next.when_pressed = handle_next_pressed
+    btn_next.when_released = handle_next_released
+    phatbeat._buttons[BTN_FFWD] = btn_next  # keeps compatibility with the phatbeat button registry    
     phatbeat.on(BTN_REWIND)(handle_prev)
     phatbeat.on(BTN_PLAYPAUSE)(handle_play_pause)
     phatbeat.on(BTN_VOLUP)(handle_vol_up)
@@ -142,6 +146,39 @@ def play_stream(url):
     player.audio_set_volume(current_volume)
     print(f"Playing: {current_label}")
 
+LONG_PRESS_DURATION = 2.0  # seconds
+
+# --- Internal helper for shutdown visual feedback ---
+def shutdown_effect():
+    """Blink red three times before shutdown."""
+    for _ in range(3):
+        phatbeat.set_all(238, 130, 238, brightness=0.6)
+        phatbeat.show()
+        time.sleep(0.25)
+        phatbeat.clear()
+        phatbeat.show()
+        time.sleep(0.25)
+
+# --- Track press time ---
+_press_start = {}
+
+def handle_next_pressed():
+    """Mark start of press."""
+    _press_start["next"] = time.time()
+
+def handle_next_released():
+    """Detect short vs long press on release."""
+    if "next" not in _press_start:
+        return
+    duration = time.time() - _press_start["next"]
+    del _press_start["next"]
+
+    if duration >= LONG_PRESS_DURATION:
+        print(f"Long press ({duration:.2f}s) — initiating shutdown")
+        shutdown_effect()
+        threading.Thread(target=lambda: os.system("sudo shutdown -h now"), daemon=True).start()
+    else:
+        next_station()
 
 def next_station():
     global station_index
@@ -268,7 +305,6 @@ def get_timer_status():
 # ===============================
 # Button callbacks
 # ===============================
-def handle_next(pin): next_station()
 def handle_prev(pin): prev_station()
 def handle_play_pause(pin): toggle_mute()
 def handle_vol_up(pin): volume_up()
