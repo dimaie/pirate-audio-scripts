@@ -61,7 +61,6 @@ async function toggleTimer() {
 
 async function toggleMute() {
     await fetch('/toggle_mute', { method: 'POST' });
-    await refreshStatus();
 }
 
 async function setStream() {
