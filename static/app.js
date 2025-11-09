@@ -37,20 +37,26 @@ async function addPreset() {
   }
 }
 
-function toggleTimer() {
-  fetch('/toggle_timer', {method: 'POST'})
-    .then(res => res.json())
-    .then(data => console.log("Timer:", data));
-}
+async function toggleTimer() {
+  const intervalInput = document.getElementById('timerInterval');
+  let minutes = parseInt(intervalInput.value, 10);
+  if (isNaN(minutes) || minutes <= 0) minutes = 30; // fallback to default
 
-function setTimerInterval() {
-  const minutes = document.getElementById('timerInterval').value;
-  fetch('/set_timer_interval', {
-    method: 'POST',
-    body: new URLSearchParams({minutes: minutes}),
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'}
-  }).then(res => res.json())
-    .then(data => console.log("Interval set:", data));
+  try {
+    // set timer interval first
+    await fetch('/set_timer_interval', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({minutes: minutes})
+    });
+
+    // then toggle timer
+    const res = await fetch('/toggle_timer', {method: 'POST'});
+    const data = await res.json();
+    console.log("Timer toggled:", data);
+  } catch (e) {
+    console.error('Toggle timer failed:', e);
+  }
 }
 
 async function toggleMute() {
